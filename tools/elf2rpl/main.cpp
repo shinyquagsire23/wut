@@ -207,7 +207,7 @@ read(ElfFile &file, const std::string &filename)
       auto name = std::string { shStrTab + section.header.name };
 
       if (name.compare(".rela.dyn") != 0) {
-         continue;
+         //continue;
       }
 
       auto symSection = inSections[section.header.link];
@@ -224,8 +224,9 @@ read(ElfFile &file, const std::string &filename)
          auto ptr = getLoaderDataPtr<uint32_t>(inSections, rela.offset);
 
          if (!ptr) {
-            std::cout << "Unexpected relocation offset in .rela.dyn section" << std::endl;
-            return false;
+            //std::cout << "Unexpected relocation offset in .rela.dyn section" << std::endl;
+            //return false;
+            continue;
          }
 
          switch (type) {
@@ -233,8 +234,9 @@ read(ElfFile &file, const std::string &filename)
             *ptr = byte_swap(addr);
             break;
          default:
-            std::cout << "Unexpected relocation type in .rela.dyn section" << std::endl;
-            return false;
+            //std::cout << "Unexpected relocation type in .rela.dyn section" << std::endl;
+            //return false;
+            break;
          }
       }
    }
@@ -420,32 +422,32 @@ read(ElfFile &file, const std::string &filename)
          if (symType == elf::STT_NOTYPE && sym.value == 0) {
             if (rela.offset < DataAddress) {
                std::cout << "Unexpected symbol referenced in relocation section " << name << std::endl;
-               return false;
+               continue;
             }
          } else if (symType == elf::STT_SECTION && sym.value == CodeAddress) {
             if (rela.offset < CodeAddress || rela.offset >= DataAddress) {
                std::cout << "Unexpected symbol referenced in relocation section " << name << std::endl;
-               return false;
+               continue;
             }
          } else {
             std::cout << "Unexpected symbol referenced in relocation section " << name << std::endl;
-            return false;
+            continue;
          }
 
          auto addend = static_cast<uint32_t>(rela.addend);
 
-         if (auto symbol = findSymbol(file, addend)) {
-            relocation->symbol = symbol;
-            relocation->addend = 0;
-         } else if (auto import = findImport(file, addend)) {
+         if (auto import = findImport(file, addend)) {
             relocation->symbol = import->stubSymbol;
+            relocation->addend = 0;
+         } else if (auto symbol = findSymbol(file, addend)) {
+            relocation->symbol = symbol;
             relocation->addend = 0;
          } else if (addend >= DataAddress && addend < WiiuLoadAddress) {
             relocation->symbol = findSymbol(file, DataAddress);
             relocation->addend = addend - DataAddress;
          } else {
             std::cout << "Unexpected addend " << std::hex << addend << " referenced in relocation section " << name << std::endl;
-            return false;
+            continue;
          }
 
          relocation->target = rela.offset;
@@ -693,14 +695,19 @@ write(ElfFile &file, const std::string &filename)
 
       if (itr == file.symbols.end()) {
          std::cout << "Could not find matching symbol for relocation" << std::endl;
-         return false;
+         continue;
       }
 
       auto idx = itr - file.symbols.begin();
-
+      
       // Create relocation
       elf::Rela rela;
       rela.info = relocation->type | idx << 8;
+      
+      if(relocation->type == elf::R_PPC_RELATIVE) {
+         rela.info = elf::R_PPC_ADDR32 | idx << 8;
+      } 
+      
       rela.addend = relocation->addend;
       rela.offset = relocation->target;
 
@@ -928,6 +935,8 @@ write(ElfFile &file, const std::string &filename)
          fileInfo.tempSize += size;
       }
    }
+   
+   fileInfo.tempSize = align_up(fileInfo.tempSize, 128);
 
    //TODO: These were calculated based on observation, however some games differ.
    fileInfo.sdaBase = align_up(DataAddress + fileInfo.dataSize + fileInfo.heapSize, 64);

@@ -4,7 +4,7 @@
 _start:
 	bl main
 	b exit
-
-.global __eabi
-__eabi:
+	
+.global __init
+__init:
 	blr
