@@ -4,6 +4,10 @@
 _start:
 	bl main
 	b exit
+
+.global __wrap___eabi
+__wrap___eabi:
+	blr
 	
 .global __init
 __init:
