@@ -65,6 +65,19 @@ SECTIONS {
       *(.eh_frame_hdr)
       *(.gnu.linkonce.d.*)
       SORT(CONSTRUCTORS)
+      
+      . = ALIGN(32);
+      __sdata_start = .;
+      *(.sdata)
+      *(.sdata.*)
+      __sdata_end = .;
+      
+      . = ALIGN(32);
+      __sdata2_start = .;
+      *(.sdata2)
+      *(.sdata2.*)
+      *(.gnu.linkonce.s2.*)
+      __sdata2_end = .;
    } : hdr_sdata
    
    .tdata ALIGN(256) :
@@ -124,36 +137,6 @@ SECTIONS {
       KEEP (*(SORT(.dtors.*)))
       KEEP (*(.dtors))
    } : hdr_data
-
-   .sdata ALIGN(256) : {
-      __sdata_start = .;
-      *(.sdata)
-      *(.sdata.*)
-      __sdata_end = .;
-   }
-
-   .sbss ALIGN(256) : {
-      __sbss_start = .;
-      *(.sbss)
-      *(.sbss.*)
-      __sbss_end = .;
-   }
-
-   .sdata2 ALIGN(256) : {
-      __sdata2_start = .;
-      *(.sdata2)
-      *(.sdata2.*)
-      *(.gnu.linkonce.s2.*)
-      __sdata2_end = .;
-   }
-
-   .sbss2 ALIGN(256) : {
-      __sbss2_start = .;
-      *(.sbss2)
-      *(.sbss2.*)
-      *(.gnu.linkonce.sb2.*)
-      __sbss2_end = .;
-   }
    
    __bss_start__ = .;
    .bss ALIGN(4) :
@@ -163,6 +146,19 @@ SECTIONS {
       *(.bss.*)
       *(.gnu.linkonce.b*)
       *(COMMON)
+      . = ALIGN(4);
+      
+      __sbss_start = .;
+      *(.sbss)
+      *(.sbss.*)
+      __sbss_end = .;
+      . = ALIGN(4);
+      
+      __sbss2_start = .;
+      *(.sbss2)
+      *(.sbss2.*)
+      *(.gnu.linkonce.sb2.*)
+      __sbss2_end = .;
       . = ALIGN(4);
 
       /* Reserve space for the TLS segment of the main thread */

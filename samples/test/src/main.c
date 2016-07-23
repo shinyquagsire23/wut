@@ -2,22 +2,25 @@
 #include <coreinit/debug.h>
 #include <coreinit/thread.h>
 #include <coreinit/internal.h>
+#include <coreinit/heap.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+const char *asdf_str = "asdf";
+int something = 1;
 
 int
 CoreEntryPoint(int argc, const char **argv)
 {
-   OSReport("Hello world from %s", argv[0]);
+   OSReport("Hello world from %s\n", argv[0]);
+   something = 2;
    return argc;
 }
-
-const char *asdf_str = "asdf";
 
 int
 main(int argc, char **argv)
 {
-   OSReport("Main thread running on core %d", OSGetCoreId());
+   OSReport("Main thread running on core %d\n", OSGetCoreId());
 
    // Run thread on core 0
    OSThread *threadCore0 = OSGetDefaultThread(0);
@@ -42,15 +45,18 @@ main(int argc, char **argv)
    OSJoinThread(threadCore0, &resultCore0);
    OSJoinThread(threadCore2, &resultCore2);
 
-   OSReport("Core 0 thread returned %d", resultCore0);
-   OSReport("Core 2 thread returned %d", resultCore2);
+   OSReport("Core 0 thread returned %d %x\n", resultCore0, something);
+   OSReport("Core 2 thread returned %d\n", resultCore2);
    char *asdf = malloc(0x123);
    
+   //Test global vars, which use .rela.dyn relocations for .sdata
    void *addr = asdf_str;
    unsigned int val = *(unsigned int*)addr;
-   __os_snprintf(asdf, 0x123, "%x its: %x", addr, val);
-   OSFatal(asdf);
-   snprintf(asdf, 0x123, "%-8s", "asdfffffff");
+   __os_snprintf(asdf, 0x123, "%x its: %x %x\n", addr, val);
    OSReport(asdf);
+   
+   //Test sprintf
+   snprintf(asdf, 0x123, "%s %x", "hello sprintf!", 0x12345);
+   OSFatal(asdf);
    return 0;
 }

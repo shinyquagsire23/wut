@@ -207,7 +207,7 @@ read(ElfFile &file, const std::string &filename)
       auto name = std::string { shStrTab + section.header.name };
 
       if (name.compare(".rela.dyn") != 0) {
-         //continue;
+         continue;
       }
 
       auto symSection = inSections[section.header.link];
@@ -224,9 +224,9 @@ read(ElfFile &file, const std::string &filename)
          auto ptr = getLoaderDataPtr<uint32_t>(inSections, rela.offset);
 
          if (!ptr) {
-            //std::cout << "Unexpected relocation offset in .rela.dyn section" << std::endl;
-            //return false;
-            continue;
+            std::cout << "Unexpected relocation offset in .rela.dyn section" << std::endl;
+            return false;
+            //continue;
          }
 
          switch (type) {
@@ -455,6 +455,85 @@ read(ElfFile &file, const std::string &filename)
          file.relocations.emplace_back(relocation);
       }
    }
+   
+   // Read dyn relocations
+   for (auto &section : inSections) {
+      if (section.header.type != elf::SHT_RELA) {
+         continue;
+      }
+
+      auto name = std::string { shStrTab + section.header.name };
+
+      if (name.compare(".rela.dyn") != 0) {
+         continue;
+      }
+
+      auto symSection = inSections[section.header.link];
+      auto relas = reinterpret_cast<elf::Rela *>(section.data.data());
+      auto count = section.data.size() / sizeof(elf::Rela);
+
+      for (auto i = 0u; i < count; ++i) {
+         auto relocation = new ElfFile::Relocation();
+         auto &rela = relas[i];
+         auto index = rela.info >> 8;
+         auto symbol = getSectionSymbol(symSection, index);
+         auto addr = symbol->value + rela.addend;
+
+         auto type = rela.info & 0xff;
+         auto ptr = getLoaderDataPtr<uint32_t>(inSections, rela.offset);
+
+         if (!ptr) {
+            std::cout << "Unexpected relocation offset in .rela.dyn section" << std::endl;
+            return false;
+            //continue;
+         }
+         
+         if(index == 0)
+         {
+            auto addend = static_cast<uint32_t>(rela.addend);
+
+             if (auto import = findImport(file, addend)) {
+                relocation->symbol = import->stubSymbol;
+                relocation->addend = 0;
+             } else if (auto symbol = findSymbol(file, addend)) {
+                relocation->symbol = symbol;
+                relocation->addend = 0;
+             } else if (addr >= CodeAddress && addr < DataAddress) {
+               printf("%x text address to %x, type %u\n", addr, rela.offset.value(), type);
+               index = 1;
+               relocation->symbol = findSymbol(file, CodeAddress);
+               relocation->addend = rela.addend - CodeAddress;
+            } else if (addr >= DataAddress && addr < WiiuLoadAddress) {
+               printf("%x data address to %x, type %u\n", addr, rela.offset.value(), type);
+               index = 2;
+               relocation->symbol = findSymbol(file, DataAddress);
+               relocation->addend = rela.addend - DataAddress;
+            } else if (addr >= WiiuLoadAddress) {
+               printf("%x load address?\n", addr);
+               return false;
+            } else {
+               printf("%x ??? address\n", addr);
+               return false;
+            }
+         }
+
+         switch (type) {
+         case elf::R_PPC_RELATIVE:
+            type = elf::R_PPC_ADDR32;
+            break;
+         default:
+            std::cout << "Unexpected relocation type in .rela.dyn section" << std::endl;
+            return false;
+         }
+         
+         relocation->target = rela.offset;
+         relocation->type = static_cast<elf::RelocationType>(type);
+         
+         // Scrap any 0x01000000 relocations
+         if(relocation->target >= CodeAddress && relocation->target < WiiuLoadAddress)
+            file.relocations.emplace_back(relocation);
+      }
+   }
 
    return true;
 }
@@ -658,7 +737,7 @@ write(ElfFile &file, const std::string &filename)
 
    // Prune out unneeded symbols
    for (auto i = 0u; i < file.symbols.size(); ++i) {
-      if (!file.symbols[i]->name.empty() && file.symbols[i]->type == elf::STT_NOTYPE) {
+      if (!file.symbols[i]->name.empty() && file.symbols[i]->type == elf::STT_NOTYPE && file.symbols[i]->size == 0) {
          file.symbols.erase(file.symbols.begin() + i);
          i--;
       }
@@ -692,13 +771,28 @@ write(ElfFile &file, const std::string &filename)
       auto itr = std::find_if(file.symbols.begin(), file.symbols.end(), [&relocation](auto &val) {
          return val.get() == relocation->symbol;
       });
+      
+      auto idx = itr - file.symbols.begin();;
 
       if (itr == file.symbols.end()) {
-         std::cout << "Could not find matching symbol for relocation" << std::endl;
-         continue;
+         if (relocation->symbol->address >= CodeAddress && relocation->symbol->address < DataAddress) {
+            idx = 1;
+            relocation->addend = relocation->symbol->address - CodeAddress;
+            relocation->symbol = findSymbol(file, CodeAddress);
+         } else if (relocation->symbol->address >= DataAddress && relocation->symbol->address < WiiuLoadAddress) {
+            idx = 2;
+            relocation->addend = relocation->symbol->address - DataAddress;
+            relocation->symbol = findSymbol(file, DataAddress);
+         } else {
+            std::cout << "Could not find matching symbol for relocation" << std::endl;
+            return false;
+         }
+         
+         printf("target: %x addend: %x to_write: %x name: %s\n", relocation->target, relocation->addend, relocation->symbol->address, relocation->symbol->name.c_str());
       }
+      //printf("ok %x %x %s\n", relocation->target, relocation->addend, relocation->symbol->name.c_str());
 
-      auto idx = itr - file.symbols.begin();
+      
       
       // Create relocation
       elf::Rela rela;
@@ -936,7 +1030,7 @@ write(ElfFile &file, const std::string &filename)
       }
    }
    
-   fileInfo.tempSize = align_up(fileInfo.tempSize, 128);
+   fileInfo.tempSize = align_up(fileInfo.tempSize+1024, 1024);
 
    //TODO: These were calculated based on observation, however some games differ.
    fileInfo.sdaBase = align_up(DataAddress + fileInfo.dataSize + fileInfo.heapSize, 64);
