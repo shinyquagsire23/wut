@@ -20,11 +20,8 @@ INCLUDE  := include
 DATA     := data
 LIBS     := -lgcc -lcoreinit
 
-CFLAGS   += -std=gnu11 -mno-eabi -mhard-float -ffast-math \
-		    -O3 -Wall -Wextra -Wno-unused-parameter -Wno-strict-aliasing
-CXXFLAGS += -std=gnu++11 -mno-eabi -mhard-float -ffast-math \
-		    -O3 -Wall -Wextra -Wno-unused-parameter -Wno-strict-aliasing
-LDFLAGS  += -Wl,-Map,$(notdir $@).map,-wrap,malloc,-wrap,free,-wrap,memalign,-wrap,calloc,-wrap,realloc,-wrap,malloc_usable_size,-wrap,_malloc_r,-wrap,_free_r,-wrap,_realloc_r,-wrap,_calloc_r,-wrap,_memalign_r,-wrap,_malloc_usable_size_r,-wrap,valloc,-wrap,_valloc_r,-wrap,_pvalloc_r,-wrap,__eabi,-wrap,_wcsrtombs_r 
+CFLAGS   += -O2 -Wall -std=c11
+CXXFLAGS += -O2 -Wall
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 
